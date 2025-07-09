@@ -1,4 +1,4 @@
-from qiskit import Aer
+from qiskit_aer import Aer
 
 from shor.arithmetic.hrs_mod_exp import mod_exp_hrs
 from shor.mosca_ekert.mosca_ekert import DiscreteLogMoscaEkertSharedRegister

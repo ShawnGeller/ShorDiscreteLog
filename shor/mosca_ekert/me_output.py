@@ -1,5 +1,5 @@
 from shor.mosca_ekert.mosca_ekert import DiscreteLogMoscaEkertSharedRegister, DiscreteLogMoscaEkertSeperateRegister
-from qiskit import Aer, transpile, execute
+from qiskit_aer import Aer, transpile, execute
 import json
 
 

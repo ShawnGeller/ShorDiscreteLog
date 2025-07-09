@@ -1,5 +1,6 @@
 import unittest
-from qiskit import QuantumCircuit, QuantumRegister, Aer
+from qiskit import QuantumCircuit, QuantumRegister
+from qiskit_aer import Aer
 
 from shor.arithmetic.hrs_mod_exp import mod_exp_hrs
 from .test_util import run_on_simulator, set_input

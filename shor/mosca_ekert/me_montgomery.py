@@ -1,4 +1,4 @@
-from qiskit import Aer
+from qiskit_aer import Aer
 
 from shor.arithmetic.montgomery_mod_exp import mod_exp_montgomery
 from shor.mosca_ekert.mosca_ekert import DiscreteLogMoscaEkertSharedRegister

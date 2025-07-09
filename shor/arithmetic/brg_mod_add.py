@@ -1,3 +1,5 @@
+import qiskit
+import qiskit.synthesis
 from qiskit import QuantumCircuit, QuantumRegister
 from qiskit.circuit.library import QFT
 from .draper_add import phi_add_builtin, phi_addition_controlled, phi_addition_cc
@@ -22,8 +24,8 @@ def phi_add_mod_N_cc(n, y, N):
 
     qc_add = QuantumCircuit(ctrl, reg, aux, name="CCADD(%d)MOD(%d)" % (y, N))
 
-    iqft = QFT(n, do_swaps=False).inverse()
-    qft = QFT(n, do_swaps=False)
+    iqft = qiskit.synthesis.qft.synth_qft_full(n, do_swaps=False).inverse()
+    qft = qiskit.synthesis.qft.synth_qft_full(n, do_swaps=False)
 
     # add y
     qc_add.append(phi_addition_cc(n, y, 1), list(ctrl) + list(reg))

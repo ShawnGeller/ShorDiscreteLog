@@ -1,3 +1,5 @@
+import qiskit
+import qiskit.synthesis
 from qiskit import QuantumCircuit, QuantumRegister
 from qiskit.circuit.library import QFT
 from .brg_mod_add import phi_add_mod_N_cc
@@ -67,7 +69,7 @@ def mult_mod_N_partial_c(y, N, size_x, size_b):
     mult = QuantumCircuit(control, reg_x, reg_b, reg_anc, name="CMUL0(%d)MOD(%d)" % (y, N))
 
     # QFT on b
-    mult.append(QFT(size_b, do_swaps=False), reg_b)
+    mult.append(qiskit.synthesis.qft.synth_qft_full(size_b, do_swaps=False), reg_b)
 
     # For each x-bit add a controlled addition with 2^k*y
     for k in range(0, size_x):
@@ -78,6 +80,6 @@ def mult_mod_N_partial_c(y, N, size_x, size_b):
         mult.append(adder_gate, controls + list(reg_b) + [reg_anc[0]])
 
     # IQFT on b
-    mult.append(QFT(size_b, do_swaps=False).inverse(), reg_b)
+    mult.append(qiskit.synthesis.qft.synth_qft_full(size_b, do_swaps=False).inverse(), reg_b)
 
     return mult

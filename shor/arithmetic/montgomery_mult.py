@@ -1,3 +1,5 @@
+import qiskit
+import qiskit.synthesis
 from qiskit.circuit.library import QFT
 from qiskit import QuantumCircuit, QuantumRegister
 from .draper_add import phi_addition_cc, phi_addition_controlled_ignorebits, phi_addition_controlled
@@ -26,7 +28,7 @@ def mult_montgomery_partial_c(n, classical_y_montg, p):
     bigreg = QuantumRegister(n + n + 1, "bigreg")  # + ancilla for reduction
 
     mult = QuantumCircuit(ctrl, smallreg, bigreg, name="CCPHIMULT_partial(%d mod %d)" % (classical_y_montg, p))
-    mult.append(QFT(n + n + 1, do_swaps=False), bigreg)
+    mult.append(qiskit.synthesis.qft.synth_qft_full(n + n + 1, do_swaps=False), bigreg)
 
     # Perform multiplication by repeated addition (controlled)
     for i in range(0, n):  # for each bit in x
@@ -55,12 +57,12 @@ def mult_montgomery_partial_c(n, classical_y_montg, p):
         mult.append(sub_gate, qubits)  # = subtraction because factor = -1
 
     # transform back from qft space to extract sign
-    mult.append(QFT(n + 1, do_swaps=False).inverse(), bigreg[n:])
+    mult.append(qiskit.synthesis.qft.synth_qft_full(n + 1, do_swaps=False).inverse(), bigreg[n:])
 
     signbit = bigreg[-1:]
 
     # return to QFT for the remaining l bits
-    mult.append(QFT(n, do_swaps=False), bigreg[n:n + n])
+    mult.append(qiskit.synthesis.qft.synth_qft_full(n, do_swaps=False), bigreg[n:n + n])
 
     # controlled addition of p (if sign is negative)
     mult.append(phi_addition_controlled(n, p, 1), [signbit] + list(bigreg[n:n + n]))
@@ -76,7 +78,7 @@ def mult_montgomery_partial_c(n, classical_y_montg, p):
     # now have to uncompute u' as before
     # the paper now gives a way to uncompute this u' using an equality (= subtractions)
     uncom_qubits = list(bigreg[:n]) + (bigreg[-1:])
-    mult.append(QFT(n + 1, do_swaps=False), uncom_qubits)
+    mult.append(qiskit.synthesis.qft.synth_qft_full(n + 1, do_swaps=False), uncom_qubits)
 
     pinvbig = pow(p, -1, 2 ** (n + 1))  # p inverse mod 2^(l+1)
     for i in range(0, n):
@@ -86,10 +88,10 @@ def mult_montgomery_partial_c(n, classical_y_montg, p):
     # TODO: i.m.o. hadamard would be enough for this register
 
     # qft for result register
-    mult.append(QFT(n, do_swaps=False).inverse(), bigreg[n:n + n])
+    mult.append(qiskit.synthesis.qft.synth_qft_full(n, do_swaps=False).inverse(), bigreg[n:n + n])
 
     # qft for ancillas
-    mult.append(QFT(n + 1, do_swaps=False).inverse(), uncom_qubits)
+    mult.append(qiskit.synthesis.qft.synth_qft_full(n + 1, do_swaps=False).inverse(), uncom_qubits)
 
     return mult
 

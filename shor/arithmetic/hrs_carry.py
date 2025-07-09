@@ -242,7 +242,7 @@ def cc_carry_gate(n, c_bin_rev):
 
     # I start with the last bit (= result bit)
     # since this bit is assumed to be 0 (since I use one more bit than necessary),
-    carryc.mct(list(c) + [greg[n - 2]], areg[n - 1])
+    carryc.mcx(list(c) + [greg[n - 2]], areg[n - 1])
 
     # Since we apply the controlled operations, before the flips are actually done, we start with the highest bit
     # (see above) - the last one and first one will get extra treatment
@@ -286,7 +286,7 @@ def cc_carry_gate(n, c_bin_rev):
         carryc.ccx(greg[i - 1], areg[i], greg[i])
 
     # and as before the last bit is applied according to the toggle g
-    carryc.mct(list(c) + [greg[n - 2]], areg[n - 1])
+    carryc.mcx(list(c) + [greg[n - 2]], areg[n - 1])
 
     # in preperation for the rest of the algorithm, I already add the x-gate to the last bit
     # if msb of c is 1 (this is the same as just adding the carry to msb)

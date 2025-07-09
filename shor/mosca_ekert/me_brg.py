@@ -1,4 +1,4 @@
-from qiskit import Aer
+from qiskit_aer import Aer
 
 from shor.mosca_ekert.mosca_ekert import DiscreteLogMoscaEkertSharedRegister
 
