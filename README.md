@@ -43,7 +43,7 @@ There are two versions of the algorithm, each able to use all of the modular exp
 The first version uses two seperate registers for the inputs of the two exponentiation operations and measures once at the end of the circuit:
 
 ```python
-from qiskit import Aer
+from qiskit_aer import Aer
 from shor.mosca_ekert.mosca_ekert import DiscreteLogMoscaEkertSeperateRegister
 
 simulator = Aer.get_backend('aer_simulator')
@@ -61,7 +61,7 @@ shots of the quantum algorithm returned this right result and how many failed.
 The second version uses only one register as the input for each stage. This register will be reset after the first measurement:
 
 ```python
-from qiskit import Aer
+from qiskit_aer import Aer
 from shor.mosca_ekert.mosca_ekert import DiscreteLogMoscaEkertSharedRegister
 
 simulator = Aer.get_backend('aer_simulator')
@@ -76,7 +76,8 @@ Per default, the algorithm will use `shor.arithmetic.brg_mod_exp.mod_exp_brg` as
 which returns any other implementation as a QuantumCircuit and will use this circuit:
 
 ```python
-from qiskit import Aer, QuantumCircuit
+from qiskit_aer import Aer
+from qiskit import QuantumCircuit
 
 from shor.arithmetic.hrs_mod_exp import mod_exp_hrs
 from shor.mosca_ekert.mosca_ekert import DiscreteLogMoscaEkertSharedRegister
@@ -106,7 +107,7 @@ There are two versions of the algorithm, that optimize the inverse QFT required 
 
 The first one performs the inverse QFT semi-classically, by conditioning the rotations not on quantum register, but measured values in classical registers:
 ```python
-from qiskit import Aer, QuantumCircuit
+from qiskit_aer import Aer, QuantumCircuit
 
 from shor.arithmetic.hrs_mod_exp import mod_exp_hrs
 from shor.mosca_ekert.mosca_ekert import DiscreteLogMoscaEkertSemiClassicalQFT
@@ -124,7 +125,7 @@ print(result)
 
 The second one restructures the algorithm such that only one control register is required (see Section 5.2 in the references paper by Mosca and Ekert).
 ```python
-from qiskit import Aer, QuantumCircuit
+from qiskit_aer import Aer, QuantumCircuit
 
 from shor.arithmetic.hrs_mod_exp import mod_exp_hrs
 from shor.mosca_ekert.mosca_ekert import DiscreteLogMoscaEkertOneQubitQFT

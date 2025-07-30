@@ -1,9 +1,9 @@
 from typing import Dict, Optional, Union, Callable
 
 from qiskit import QuantumCircuit, QuantumRegister, ClassicalRegister, transpile
-from qiskit.utils import QuantumInstance
+# from qiskit.utils import QuantumInstance
 from qiskit.circuit.library import QFT
-from qiskit.providers import Backend, BaseBackend
+from qiskit.providers import Backend  #, BaseBackend
 
 from shor.arithmetic.brg_mod_exp import mod_exp_brg
 
@@ -29,7 +29,8 @@ class DiscreteLogMoscaEkert():
                  mod_exp_constructor: Callable[[int, int, int], QuantumCircuit] = None,
                  full_run: bool = False,
                  quantum_instance: Optional[
-                     Union[QuantumInstance, Backend, BaseBackend, Backend]] = None) -> None:
+                     # Union[QuantumInstance, Backend, BaseBackend, Backend]] = None) -> None:
+                     Union[Backend]] = None) -> None:
         """
         Args:
             b: Finds discrete logarithm of b with respect to generator g and module p.
@@ -50,6 +51,7 @@ class DiscreteLogMoscaEkert():
         self._n = n
         self._full_run = full_run
         self._quantum_instance = quantum_instance
+        self._me_circuit = None  # memoized transpiled circuit.
 
         if mod_exp_constructor is None:
             self._mod_exp_constructor = mod_exp_brg
@@ -78,14 +80,14 @@ class DiscreteLogMoscaEkert():
         The list of results for the whole circuit will be used, since the
         measurement of stage1 allows for phase estimation of the operator
         (similar to Shor's algorithm for prime factorization)."""
-        smallest_fitting_denominator = p+1  # init to p+1 (sth larger than the real result)
+        smallest_fitting_denominator = p + 1  # init to p+1 (sth larger than the real result)
         for (y1, _, _) in result_list:
-            meas_div = y1/(2**n)
+            meas_div = y1 / (2 ** n)
             frac_meas = Fraction(meas_div).limit_denominator(p - 1)
 
             # check if denominator fits
             r_candidate = frac_meas.denominator
-            if g**r_candidate % p == 1:
+            if g ** r_candidate % p == 1:
                 # fits
                 if r_candidate < smallest_fitting_denominator:
                     smallest_fitting_denominator = r_candidate
@@ -94,10 +96,10 @@ class DiscreteLogMoscaEkert():
         return smallest_fitting_denominator
 
     # Manually reproduced since quantumalgorithm interface changed
-    def run(self) -> Dict:
-        return self._run()
+    def run(self, shots:int = 100) -> Dict:
+        return self._run(shots)
 
-    def _run(self) -> Dict:
+    def _run(self, shots:int) -> Dict:
         # construct circuit
 
         # size of top register is enough to hold all values mod p
@@ -105,11 +107,11 @@ class DiscreteLogMoscaEkert():
             n = math.ceil(math.log(self._p, 2))
         else:
             n = self._n
-        print("constructing with size n=", n)
+        # print("constructing with size n=", n)
         # print("top register size: ", n)
 
         if self._quantum_instance is not None:
-            shots = 100
+            # shots = 100
 
             result_list = self._exec_qc(n, self._b, self._g, self._p, self._r, self._mod_exp_constructor,
                                         self._quantum_instance, shots)
@@ -118,49 +120,50 @@ class DiscreteLogMoscaEkert():
             num_success = 0
 
             correct_m = -1
+            if self._r == -1:
+                # period has to be calculated
+                self._r = self.find_period(result_list, n, self._p, self._g)
 
-            for (y1, y2, freq) in result_list:
-                if self._r == -1:
-                    # period has to be calculated
-                    self._r = self.find_period(result_list, n, self._p, self._g)
-
-                # k is inferred from the measurement result from first stage
-                k = int(round((y1 * self._r) / (2 ** n), 0))
-                # print("k=", k)
-
-                # m (the discrete log) is calculated by using the congruence:
-                # ((km mod r)/r)*2^n = m_stage2
-                # v = m_stage2*r/2^n
-                v = (y2 * self._r) / (2 ** n)
-                # print("v=", v)  # = km mod r
-
-                # k inverse exists?
-                if np.gcd(k, self._r) != 1:
-                    # print("No inverse for k = fail")
-                    num_fail += freq
-                else:
-                    kinv = pow(k, -1, self._r)
-                    # print("kInv=", kinv)
-                    m = int(round(v * kinv % self._r, 0))
-                    # print("found m=", m)
-
-                    # check if this m actually fits
-                    if (self._g ** m % self._p) == self._b:
-                        num_success += freq
-                        # print("found correct m!")
-                        correct_m = m
-                        if not self._full_run:
-                            break
+            # The following function is used to process the samples in the result_list.
+            # It is only used here, so defined locally.
+            def calcres(x, y, g, p, r, n):
+                # x,y: The two sampled values in the quantum discrete log algorithm.
+                # g: The base.
+                # p: The modulus for Z_n.
+                # r: g^r = 1 mod p.
+                # n: 2^n is the range of the Fourier transform for sampling x,y.
+                # For the return value, see the following calculation.
+                k = int(round(x * r / (2 ** n)))
+                l = int(round(y * r / (2 ** n)))
+                # Find m such that l = mk mod r, if possible.
+                if k == 0:  # This is no help.
+                    return ((0,-1,k,l))  # Default return for m is 0.
+                kdiv = math.gcd(k, r)
+                if kdiv > 1: # l is a multiple of k mod r iff kdiv divides l.
+                    ldiv = math.gcd(l, r)
+                    if ldiv % kdiv == 0:
+                        k = k // kdiv
+                        l = l // kdiv
+                        r = r // kdiv   # This gives the new relevant order for determining the multiple of k that is l.
                     else:
-                        # print("found wrong m!")
-                        num_fail += freq
+                        return ((0,k,l))
+                dlog = (l * pow(k, -1, r)) % r
+                return ((dlog, k, l))
 
-            print("num_fail:", num_fail)
-            print("num_success:", num_success)
+            processed_result_list = [ (x[0],x[1]) + calcres(x[0],x[1],self._g,self._p,self._r,n) + (x[2],) for x in result_list]
+            processed_result_list = [x for x in processed_result_list if pow(self._g,x[2],self._p) == self._b]  # Filter for correct discrete log.
 
-            return {"m": correct_m, "success_prob": num_success / shots}
+            num_success = sum(x[-1] for x in processed_result_list)
+            if num_success >= 1: correct_m = processed_result_list[0][2]
 
-        return {"m": -1, "success_prob": 0}
+            # Revision by Manny:
+            # The original version of this project used a poor order of rounding and modular operations
+            # that resulted in poor efficiency scaling in terms of number of samples as n increased.
+
+
+            return {"m": correct_m, "success_prob": num_success / shots, "num_success": num_success, "successes": sorted(processed_result_list,key = lambda x: x[0])}
+
+        return {"m": -1, "success_prob": 0, "num_success": 0, "successes": None}
 
 
 class DiscreteLogMoscaEkertSharedRegister(DiscreteLogMoscaEkert):
@@ -173,13 +176,16 @@ class DiscreteLogMoscaEkertSharedRegister(DiscreteLogMoscaEkert):
                  mod_exp_constructor: Callable[[int, int, int], QuantumCircuit] = None,
                  full_run: bool = False,
                  quantum_instance: Optional[
-                     Union[QuantumInstance, Backend, BaseBackend, Backend]] = None) -> None:
+                     # Union[QuantumInstance, Backend, BaseBackend, Backend]] = None) -> None:
+                     Union[Backend]] = None) -> None:
         super().__init__(b, g, p, r, n, mod_exp_constructor, full_run, quantum_instance)
 
     def _exec_qc(self, n, b, g, p, r, mod_exp_constructor, quantum_instance, shots) -> [(int, int, int)]:
-        me_circuit = transpile(self._construct_circuit(n, b, g, p, r, mod_exp_constructor),
+        if self._me_circuit is None:
+            self._me_circuit = transpile(self._construct_circuit(n, b, g, p, r, mod_exp_constructor),
                                quantum_instance)
-        counts = quantum_instance.run(me_circuit, shots=shots).result().get_counts(me_circuit)
+
+        counts = quantum_instance.run(self._me_circuit, shots=shots).result().get_counts(self._me_circuit)
 
         res = list()
         for result in counts.keys():
@@ -254,13 +260,16 @@ class DiscreteLogMoscaEkertSeperateRegister(DiscreteLogMoscaEkert):
                  mod_exp_constructor: Callable[[int, int, int], QuantumCircuit] = None,
                  full_run: bool = False,
                  quantum_instance: Optional[
-                     Union[QuantumInstance, Backend, BaseBackend, Backend]] = None) -> None:
+                     # Union[QuantumInstance, Backend, BaseBackend, Backend]] = None) -> None:
+                     Union[Backend]] = None) -> None:
         super().__init__(b, g, p, r, n, mod_exp_constructor, full_run, quantum_instance)
 
     def _exec_qc(self, n, b, g, p, r, mod_exp_constructor, quantum_instance, shots) -> [(int, int, int)]:
-        me_circuit = transpile(self._construct_circuit(n, b, g, p, r, mod_exp_constructor),
+        if self._me_circuit is None:
+            self._me_circuit = transpile(self._construct_circuit(n, b, g, p, r, mod_exp_constructor),
                                quantum_instance)
-        counts = quantum_instance.run(me_circuit, shots=shots).result().get_counts(me_circuit)
+
+        counts = quantum_instance.run(self._me_circuit, shots=shots).result().get_counts(self._me_circuit)
 
         res = list()
         for result in counts.keys():
@@ -320,6 +329,7 @@ class DiscreteLogMoscaEkertSeperateRegister(DiscreteLogMoscaEkert):
 
         return me_circuit
 
+
 class DiscreteLogMoscaEkertSemiClassicalQFT(DiscreteLogMoscaEkert):
     def __init__(self,
                  b: int,
@@ -330,13 +340,16 @@ class DiscreteLogMoscaEkertSemiClassicalQFT(DiscreteLogMoscaEkert):
                  mod_exp_constructor: Callable[[int, int, int], QuantumCircuit] = None,
                  full_run: bool = False,
                  quantum_instance: Optional[
-                     Union[QuantumInstance, Backend, BaseBackend, Backend]] = None) -> None:
+                     # Union[QuantumInstance, Backend, BaseBackend, Backend]] = None) -> None:
+                     Union[Backend]] = None) -> None:
         super().__init__(b, g, p, r, n, mod_exp_constructor, full_run, quantum_instance)
 
     def _exec_qc(self, n, b, g, p, r, mod_exp_constructor, quantum_instance, shots) -> [(int, int, int)]:
-        me_circuit = transpile(self._construct_circuit(n, b, g, p, r, mod_exp_constructor),
-                               quantum_instance)
-        counts = quantum_instance.run(me_circuit, shots=shots).result().get_counts(me_circuit)
+        if self._me_circuit is None:
+            self._me_circuit = transpile(self._construct_circuit(n, b, g, p, r, mod_exp_constructor),
+                                         quantum_instance)
+
+        counts = quantum_instance.run(self._me_circuit, shots=shots).result().get_counts(self._me_circuit)
 
         res = list()
         for result in counts.keys():
@@ -352,7 +365,7 @@ class DiscreteLogMoscaEkertSemiClassicalQFT(DiscreteLogMoscaEkert):
 
             m_stage1_bin = ""
             for i in range(0, n):
-                m_stage1_bin = m_stage1_bin + result_s[n+i]
+                m_stage1_bin = m_stage1_bin + result_s[n + i]
 
             #print(m_stage2_bin)
             #print(m_stage1_bin)
@@ -444,6 +457,7 @@ class DiscreteLogMoscaEkertSemiClassicalQFT(DiscreteLogMoscaEkert):
 
         return me_circuit
 
+
 class DiscreteLogMoscaEkertOneQubitQFT(DiscreteLogMoscaEkert):
     def __init__(self,
                  b: int,
@@ -454,7 +468,8 @@ class DiscreteLogMoscaEkertOneQubitQFT(DiscreteLogMoscaEkert):
                  mod_mul_constructor: Callable[[int, int, int], QuantumCircuit] = None,
                  full_run: bool = False,
                  quantum_instance: Optional[
-                     Union[QuantumInstance, Backend, BaseBackend, Backend]] = None) -> None:
+                     # Union[QuantumInstance, Backend, BaseBackend, Backend]] = None) -> None:
+                     Union[Backend]] = None) -> None:
         """
         Needs direct access to the function construction a modular multiplication
         """
@@ -466,9 +481,11 @@ class DiscreteLogMoscaEkertOneQubitQFT(DiscreteLogMoscaEkert):
             self._mod_exp_constructor = mod_mul_constructor
 
     def _exec_qc(self, n, b, g, p, r, mod_mul_constructor, quantum_instance, shots) -> [(int, int, int)]:
-        me_circuit = transpile(self._construct_circuit(n, b, g, p, r, mod_mul_constructor),
-                               quantum_instance)
-        counts = quantum_instance.run(me_circuit, shots=shots).result().get_counts(me_circuit)
+        if self._me_circuit is None:
+            self._me_circuit = transpile(self._construct_circuit(n, b, g, p, r, mod_mul_constructor),
+                                         quantum_instance)
+
+        counts = quantum_instance.run(self._me_circuit, shots=shots).result().get_counts(self._me_circuit)
 
         res = list()
         for result in counts.keys():
@@ -484,7 +501,7 @@ class DiscreteLogMoscaEkertOneQubitQFT(DiscreteLogMoscaEkert):
 
             m_stage1_bin = ""
             for i in range(0, n):
-                m_stage1_bin = m_stage1_bin + result_s[n+i]
+                m_stage1_bin = m_stage1_bin + result_s[n + i]
 
             #print(m_stage2_bin)
             #print(m_stage1_bin)
@@ -509,7 +526,7 @@ class DiscreteLogMoscaEkertOneQubitQFT(DiscreteLogMoscaEkert):
             me_circuit.h(topreg[i])
 
             # exec gate
-            mulgate = mod_mul_constructor(n, a**(2**i) % p, p) # U_g^(2^i)
+            mulgate = mod_mul_constructor(n, a ** (2 ** i) % p, p)  # U_g^(2^i)
 
             me_circuit.append(mulgate, [topreg[i], *botreg])
 
@@ -518,10 +535,17 @@ class DiscreteLogMoscaEkertOneQubitQFT(DiscreteLogMoscaEkert):
 
             # the rotations are performed with j's in the classical register - those are already implicitly swapped
             # therefore the swapped index is used here
+            # The following is for an outdated way of handling classical control in qiskit:
+            # for j in range(0, swapped_i):
+            #     # The register this qubit was measured in
+            #     clreg = cllist[j]
+            #     me_circuit.p(-np.pi / (2 ** (swapped_i - j)), topreg[i]).c_if(clreg, 1)
+            # Here is the updated way:
             for j in range(0, swapped_i):
                 # The register this qubit was measured in
                 clreg = cllist[j]
-                me_circuit.p(-np.pi / (2 ** (swapped_i - j)), topreg[i]).c_if(clreg, 1)
+                with me_circuit.if_test((clreg, 1)):
+                    me_circuit.p(-np.pi / (2 ** (swapped_i - j)), topreg[i])
 
             me_circuit.h(topreg[i])
 
